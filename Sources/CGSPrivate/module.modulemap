@@ -1,0 +1,5 @@
+module CGSPrivate [system] {
+    header "include/CGSPrivate.h"
+    link "CoreGraphics"
+    export *
+}
