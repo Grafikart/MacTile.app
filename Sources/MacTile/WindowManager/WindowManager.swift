@@ -389,7 +389,7 @@ final class WindowManager: WindowObserverDelegate {
 
         let actualFrame = CGRect(origin: pos, size: size)
         suppressMovesUntil = Date() + 0.3
-        tilingEngine.adjustSplitRatio(windowID: windowID, actualFrame: actualFrame)
+        tilingEngine.adjustSplitRatio(windowID: windowID, actualFrame: actualFrame, oldFrame: layoutFrame)
     }
 
     private func retileWithSuppress() {

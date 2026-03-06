@@ -105,33 +105,62 @@ final class BSPTree {
         return (parentA, windowIsLeft)
     }
 
-    func adjustSplitRatio(forWindow windowID: WindowID, actualFrame: CGRect) {
+    /// Walk up from the leaf to the root, adjusting each ancestor's split ratio
+    /// whose boundary corresponds to an edge that actually moved.
+    ///
+    ///         Root (H split)
+    ///        /          \
+    ///     N1 (V split)   N2 (V split)
+    ///    /     \        /     \
+    /// Win A   Win B   Win C   Win D
+    ///
+    /// Each ancestor controls one edge of the descendant's region:
+    /// - H split, left child  → controls **right** edge
+    /// - H split, right child → controls **left** edge
+    /// - V split, left child  → controls **bottom** edge
+    /// - V split, right child → controls **top** edge
+    func adjustSplitRatio(forWindow windowID: WindowID, actualFrame: CGRect, oldFrame: CGRect) {
         guard let root = root else { return }
         guard let leaf = root.find(windowID: windowID) else { return }
-        guard let parent = leaf.parent else { return }
-        guard let direction = parent.splitDirection else { return }
 
-        let container = parent.frame
         let halfGap = gap / 2
-        let isLeft = parent.leftChild === leaf
+        let threshold: CGFloat = 2.0
+        var current: BSPNode = leaf
 
-        let ratio: CGFloat
-        switch direction {
-        case .horizontal:
-            if isLeft {
-                ratio = (actualFrame.maxX + halfGap - container.origin.x) / container.width
-            } else {
-                ratio = (actualFrame.minX - halfGap - container.origin.x) / container.width
+        while let parent = current.parent {
+            guard let direction = parent.splitDirection else { break }
+            let container = parent.frame
+            let isLeft = parent.leftChild === current
+
+            switch direction {
+            case .horizontal:
+                if isLeft {
+                    if abs(actualFrame.maxX - oldFrame.maxX) > threshold {
+                        let ratio = (actualFrame.maxX + halfGap - container.origin.x) / container.width
+                        parent.splitRatio = min(0.9, max(0.1, ratio))
+                    }
+                } else {
+                    if abs(actualFrame.minX - oldFrame.minX) > threshold {
+                        let ratio = (actualFrame.minX - halfGap - container.origin.x) / container.width
+                        parent.splitRatio = min(0.9, max(0.1, ratio))
+                    }
+                }
+            case .vertical:
+                if isLeft {
+                    if abs(actualFrame.maxY - oldFrame.maxY) > threshold {
+                        let ratio = (actualFrame.maxY + halfGap - container.origin.y) / container.height
+                        parent.splitRatio = min(0.9, max(0.1, ratio))
+                    }
+                } else {
+                    if abs(actualFrame.minY - oldFrame.minY) > threshold {
+                        let ratio = (actualFrame.minY - halfGap - container.origin.y) / container.height
+                        parent.splitRatio = min(0.9, max(0.1, ratio))
+                    }
+                }
             }
-        case .vertical:
-            if isLeft {
-                ratio = (actualFrame.maxY + halfGap - container.origin.y) / container.height
-            } else {
-                ratio = (actualFrame.minY - halfGap - container.origin.y) / container.height
-            }
+
+            current = parent
         }
-
-        parent.splitRatio = min(0.9, max(0.1, ratio))
     }
 
     private func lastLeaf(of node: BSPNode) -> BSPNode? {

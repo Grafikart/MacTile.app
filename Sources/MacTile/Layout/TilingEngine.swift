@@ -100,8 +100,8 @@ final class TilingEngine {
         lastLayoutMap[windowID]
     }
 
-    func adjustSplitRatio(windowID: WindowID, actualFrame: CGRect) {
-        currentTree().adjustSplitRatio(forWindow: windowID, actualFrame: actualFrame)
+    func adjustSplitRatio(windowID: WindowID, actualFrame: CGRect, oldFrame: CGRect) {
+        currentTree().adjustSplitRatio(forWindow: windowID, actualFrame: actualFrame, oldFrame: oldFrame)
         applyLayout()
     }
 
