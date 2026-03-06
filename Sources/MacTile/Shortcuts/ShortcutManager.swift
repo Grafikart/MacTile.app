@@ -41,6 +41,10 @@ final class ShortcutManager {
         load()
     }
 
+    deinit {
+        stopMonitoring()
+    }
+
     // MARK: - Persistence
 
     private func load() {

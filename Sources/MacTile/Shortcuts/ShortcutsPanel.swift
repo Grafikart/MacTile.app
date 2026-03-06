@@ -3,7 +3,7 @@ import AppKit
 /// Presents a preferences window with ShortcutRecorderView rows for configuring
 /// window movement, focus, and float toggle keyboard shortcuts. Pauses global
 /// shortcut monitoring while open to avoid conflicts during recording.
-final class ShortcutsPanel {
+final class ShortcutsPanel: NSObject {
     private var window: NSWindow?
     private var moveRecorders: [MoveDirection: ShortcutRecorderView] = [:]
     private var focusRecorders: [MoveDirection: ShortcutRecorderView] = [:]
@@ -12,6 +12,7 @@ final class ShortcutsPanel {
 
     init(shortcutManager: ShortcutManager) {
         self.shortcutManager = shortcutManager
+        super.init()
     }
 
     func show() {
@@ -154,7 +155,6 @@ final class ShortcutsPanel {
         )
 
         window.makeKeyAndOrderFront(nil)
-        NSApp.setActivationPolicy(.accessory)
         NSApp.activate(ignoringOtherApps: true)
         self.window = window
     }

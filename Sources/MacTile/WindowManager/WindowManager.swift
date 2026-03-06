@@ -18,6 +18,13 @@ final class WindowManager: WindowObserverDelegate {
     private var resizingWindowID: WindowID?
     private var mouseUpMonitor: Any?
 
+    deinit {
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
+        if let monitor = mouseUpMonitor {
+            NSEvent.removeMonitor(monitor)
+        }
+    }
+
     init(statusBarController: StatusBarController) {
         self.statusBarController = statusBarController
 
@@ -67,8 +74,9 @@ final class WindowManager: WindowObserverDelegate {
             object: nil
         )
 
-        // Update space display
+        // Update space display and set initial space
         updateSpaceDisplay()
+        tilingEngine.setCurrentSpace(SpaceDetector.currentSpaceID())
 
         // Scan existing apps and windows
         scanExistingWindows()
@@ -112,10 +120,6 @@ final class WindowManager: WindowObserverDelegate {
     // MARK: - Window scanning
 
     private func scanExistingWindows() {
-        let spaceID = SpaceDetector.currentSpaceID()
-        tilingEngine.setCurrentSpace(spaceID)
-        NSLog("[MacTile] Scanning windows, spaceID=\(spaceID)")
-
         var allWindows: [TrackedWindow] = []
 
         for app in NSWorkspace.shared.runningApplications {
@@ -123,22 +127,11 @@ final class WindowManager: WindowObserverDelegate {
             observeApp(app)
 
             let appEl = AccessibilityElement.appElement(pid: app.processIdentifier)
-            let axErr = appEl.windowsError
             let appWindows = appEl.windows
-            NSLog("[MacTile]   App '\(app.localizedName ?? "?")' pid=\(app.processIdentifier) windows=\(appWindows.count) axErr=\(axErr)")
 
             for windowEl in appWindows {
-                let wid = windowEl.windowID
-                let role = windowEl.role
-                let subrole = windowEl.subrole
-                let resizable = windowEl.isResizable
-                let minimized = windowEl.isMinimized
-                let tileable = windowEl.isTileable
-                let layer = windowEl.windowLayer
-                NSLog("[MacTile]     window wid=\(String(describing: wid)) role=\(role ?? "nil") subrole=\(subrole ?? "nil") resizable=\(resizable) minimized=\(minimized) layer=\(String(describing: layer)) tileable=\(tileable)")
-
-                guard tileable else { continue }
-                guard let windowID = wid else { continue }
+                guard windowEl.isTileable else { continue }
+                guard let windowID = windowEl.windowID else { continue }
 
                 let tracked = TrackedWindow(
                     windowID: windowID,
@@ -149,7 +142,6 @@ final class WindowManager: WindowObserverDelegate {
             }
         }
 
-        NSLog("[MacTile] Total tileable windows: \(allWindows.count)")
         suppressMovesUntil = Date() + 0.3
         tilingEngine.rebuildCurrentSpace(windows: allWindows)
     }
@@ -163,6 +155,7 @@ final class WindowManager: WindowObserverDelegate {
     }
 
     private func retileCurrentSpace() {
+        tilingEngine.setCurrentSpace(SpaceDetector.currentSpaceID())
         scanExistingWindows()
     }
 
@@ -173,11 +166,10 @@ final class WindowManager: WindowObserverDelegate {
 
         // Delay slightly to let the window finish initializing
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            guard let self = self else { return }
             let el = AccessibilityElement(element)
             guard el.isTileable else { return }
             guard let windowID = el.windowID else { return }
-            guard let self = self else { return }
-
             guard !self.tilingEngine.isTracked(windowID: windowID) else { return }
 
             let tracked = TrackedWindow(windowID: windowID, element: el, pid: pid)
@@ -197,8 +189,8 @@ final class WindowManager: WindowObserverDelegate {
             return
         }
 
-        // Element is dead — try our cached mapping
-        if let windowID = tilingEngine.windowID(for: element) {
+        // Element is dead — find a stale window belonging to this pid
+        if let windowID = tilingEngine.staleWindowID(forPID: pid) {
             tilingEngine.removeWindow(windowID: windowID)
             return
         }
@@ -227,10 +219,10 @@ final class WindowManager: WindowObserverDelegate {
         guard isEnabled else { return }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            guard let self = self else { return }
             let el = AccessibilityElement(element)
             guard el.isTileable else { return }
             guard let windowID = el.windowID else { return }
-            guard let self = self else { return }
             guard !self.tilingEngine.isTracked(windowID: windowID) else { return }
 
             let tracked = TrackedWindow(windowID: windowID, element: el, pid: pid)
@@ -363,7 +355,6 @@ final class WindowManager: WindowObserverDelegate {
             placeFirst = relY < 0.5
         }
 
-        NSLog("[MacTile] Drop: window \(windowID) onto \(targetID), dir=\(direction), placeFirst=\(placeFirst)")
         suppressMovesUntil = Date() + 0.3
         tilingEngine.moveWindow(windowID: windowID, toTarget: targetID, direction: direction, placeFirst: placeFirst)
     }
@@ -389,7 +380,6 @@ final class WindowManager: WindowObserverDelegate {
         }
 
         let actualFrame = CGRect(origin: pos, size: size)
-        NSLog("[MacTile] Resize: window \(windowID) actualFrame=\(actualFrame)")
         suppressMovesUntil = Date() + 0.3
         tilingEngine.adjustSplitRatio(windowID: windowID, actualFrame: actualFrame)
     }
@@ -403,32 +393,18 @@ final class WindowManager: WindowObserverDelegate {
 
     private func toggleFocusedWindowFloat() {
         guard isEnabled else { return }
-
-        guard let windowID = tilingEngine.focusedWindowID else {
-            NSLog("[MacTile] toggleFloat: no focused window")
-            return
-        }
+        guard let windowID = tilingEngine.focusedWindowID else { return }
 
         suppressMovesUntil = Date() + 0.3
-        let isNowFloating = tilingEngine.toggleFloating(windowID: windowID)
-        NSLog("[MacTile] toggleFloat: window \(windowID) isFloating=\(isNowFloating)")
+        tilingEngine.toggleFloating(windowID: windowID)
     }
 
     // MARK: - Focus window in direction
 
     private func focusWindowInDirection(_ direction: MoveDirection) {
         guard isEnabled else { return }
-
-        guard let windowID = tilingEngine.focusedWindowID else {
-            NSLog("[MacTile] focusWindowInDirection: no focused window")
-            return
-        }
-
-        guard let targetID = tilingEngine.neighborOf(windowID: windowID, direction: direction) else {
-            NSLog("[MacTile] focusWindowInDirection: no neighbor \(direction) of \(windowID)")
-            return
-        }
-
+        guard let windowID = tilingEngine.focusedWindowID else { return }
+        guard let targetID = tilingEngine.neighborOf(windowID: windowID, direction: direction) else { return }
         guard let tracked = tilingEngine.trackedWindow(windowID: targetID) else { return }
 
         // Activate the app owning the target window and raise it
@@ -437,23 +413,14 @@ final class WindowManager: WindowObserverDelegate {
         }
         tracked.element.raise()
         tilingEngine.setFocused(windowID: targetID)
-        NSLog("[MacTile] focusWindowInDirection: focused \(targetID) (\(direction))")
     }
 
     // MARK: - Move window in direction
 
     private func moveWindowInDirection(_ direction: MoveDirection) {
         guard isEnabled else { return }
-
-        guard let windowID = tilingEngine.focusedWindowID else {
-            NSLog("[MacTile] moveWindowInDirection: no focused window")
-            return
-        }
-
-        guard let targetID = tilingEngine.neighborOf(windowID: windowID, direction: direction) else {
-            NSLog("[MacTile] moveWindowInDirection: no neighbor \(direction) of \(windowID)")
-            return
-        }
+        guard let windowID = tilingEngine.focusedWindowID else { return }
+        guard let targetID = tilingEngine.neighborOf(windowID: windowID, direction: direction) else { return }
 
         let splitDirection: SplitDirection
         let placeFirst: Bool
@@ -465,7 +432,6 @@ final class WindowManager: WindowObserverDelegate {
         case .down:  splitDirection = .vertical;   placeFirst = false
         }
 
-        NSLog("[MacTile] moveWindowInDirection: \(windowID) \(direction) onto \(targetID)")
         suppressMovesUntil = Date() + 0.3
         tilingEngine.moveWindow(windowID: windowID, toTarget: targetID, direction: splitDirection, placeFirst: placeFirst)
     }

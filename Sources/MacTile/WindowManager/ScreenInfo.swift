@@ -6,14 +6,15 @@ struct ScreenInfo {
     /// Returns the usable screen area in AX coordinates (top-left origin).
     static func usableFrame(for screen: NSScreen? = nil) -> CGRect {
         guard let screen = screen ?? NSScreen.main else {
-            return CGRect(x: 0, y: 0, width: 1920, height: 1080)
+            return .zero
         }
 
-        let full = screen.frame
         let visible = screen.visibleFrame
 
-        // Convert from Cocoa (bottom-left origin) to AX (top-left origin)
-        let axY = full.height - visible.origin.y - visible.height
+        // AX coordinates use a global top-left origin system.
+        // The primary screen's height defines the global coordinate space.
+        let primaryHeight = NSScreen.screens.first?.frame.height ?? screen.frame.height
+        let axY = primaryHeight - visible.origin.y - visible.height
         return CGRect(
             x: visible.origin.x,
             y: axY,
@@ -24,10 +25,13 @@ struct ScreenInfo {
 
     /// Returns the screen containing the given AX-coordinate point.
     static func screen(containing axPoint: CGPoint) -> NSScreen? {
+        // Cocoa coordinates are relative to the primary screen's bottom-left origin.
+        // The primary screen (screens[0]) defines the global coordinate space.
+        let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
+        let cocoaY = primaryHeight - axPoint.y
+
         for screen in NSScreen.screens {
-            let full = screen.frame
-            let cocoaY = full.height - axPoint.y
-            if full.contains(CGPoint(x: axPoint.x, y: cocoaY)) {
+            if screen.frame.contains(CGPoint(x: axPoint.x, y: cocoaY)) {
                 return screen
             }
         }

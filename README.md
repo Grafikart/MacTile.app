@@ -1,5 +1,8 @@
 # MacTile
 
+> [!IMPORTANT]
+> This app was vibe coded using my specific needs and to explore how far I can go without prior knowledge.
+
 An automatic tiling window manager for macOS. MacTile arranges your windows using a binary space partitioning (BSP) layout — every time a window is opened, the focused tile splits to make room, and closing a window causes the remaining tiles to expand to fill the gap.
 
 MacTile runs as a menu bar app with no Dock icon. It requires macOS 13+ and Accessibility permissions.

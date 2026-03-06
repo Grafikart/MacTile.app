@@ -17,6 +17,10 @@ final class WindowObserver {
     private var observers: [pid_t: AXObserver] = [:]
     weak var delegate: WindowObserverDelegate?
 
+    deinit {
+        stopAll()
+    }
+
     private static let notifications: [String] = [
         kAXWindowCreatedNotification,
         kAXUIElementDestroyedNotification,
@@ -61,7 +65,8 @@ final class WindowObserver {
     }
 
     func stopAll() {
-        for pid in observers.keys {
+        let pids = Array(observers.keys)
+        for pid in pids {
             stopObserving(pid: pid)
         }
     }

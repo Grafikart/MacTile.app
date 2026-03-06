@@ -20,9 +20,8 @@ enum MoveDirection: String, Codable, CaseIterable {
 final class TilingEngine {
     private var trees: [Int: BSPTree] = [:]  // spaceID → tree
     private var trackedWindows: [WindowID: TrackedWindow] = [:]
-    private var elementToWindowID: [AXUIElement: WindowID] = [:]
     private var currentSpaceID: Int = 1
-    private var lastLayout: [(WindowID, CGRect)] = []
+    private var lastLayoutMap: [WindowID: CGRect] = [:]
     private(set) var isApplyingLayout = false
 
     var currentSpaceIDValue: Int { currentSpaceID }
@@ -42,15 +41,12 @@ final class TilingEngine {
 
     func insertWindow(_ window: TrackedWindow) {
         trackedWindows[window.windowID] = window
-        elementToWindowID[window.element.element] = window.windowID
         currentTree().insert(windowID: window.windowID)
         applyLayout()
     }
 
     func removeWindow(windowID: WindowID) {
-        if let tracked = trackedWindows.removeValue(forKey: windowID) {
-            elementToWindowID.removeValue(forKey: tracked.element.element)
-        }
+        trackedWindows.removeValue(forKey: windowID)
         for (_, tree) in trees {
             if tree.contains(windowID: windowID) {
                 tree.remove(windowID: windowID)
@@ -60,8 +56,14 @@ final class TilingEngine {
         applyLayout()
     }
 
-    func windowID(for element: AXUIElement) -> WindowID? {
-        elementToWindowID[element]
+    /// Find a tracked window ID belonging to the given pid whose AX element is stale.
+    func staleWindowID(forPID pid: pid_t) -> WindowID? {
+        for (wid, tracked) in trackedWindows where tracked.pid == pid {
+            if tracked.element.windowID == nil {
+                return wid
+            }
+        }
+        return nil
     }
 
     /// Remove any tracked windows that are no longer valid (element is dead).
@@ -95,7 +97,7 @@ final class TilingEngine {
     }
 
     func lastLayoutFrame(for windowID: WindowID) -> CGRect? {
-        lastLayout.first(where: { $0.0 == windowID })?.1
+        lastLayoutMap[windowID]
     }
 
     func adjustSplitRatio(windowID: WindowID, actualFrame: CGRect) {
@@ -109,7 +111,7 @@ final class TilingEngine {
 
     /// Find which tiled window contains the given point based on the last layout.
     func windowAt(point: CGPoint) -> WindowID? {
-        for (windowID, frame) in lastLayout {
+        for (windowID, frame) in lastLayoutMap {
             if frame.contains(point) {
                 return windowID
             }
@@ -166,13 +168,9 @@ final class TilingEngine {
             if existingIDs == newTiledIDs && !newTiledIDs.isEmpty {
                 // Just refresh element references
                 for window in windows {
-                    if let old = trackedWindows[window.windowID] {
-                        elementToWindowID.removeValue(forKey: old.element.element)
-                    }
                     var w = window
                     w.isFloating = previouslyFloating.contains(window.windowID)
                     trackedWindows[window.windowID] = w
-                    elementToWindowID[window.element.element] = window.windowID
                 }
                 applyLayout()
                 return
@@ -182,12 +180,6 @@ final class TilingEngine {
         let tree = BSPTree()
         trees[currentSpaceID] = tree
 
-        // Clear old element mappings for windows being replaced
-        for window in windows {
-            if let old = trackedWindows[window.windowID] {
-                elementToWindowID.removeValue(forKey: old.element.element)
-            }
-        }
         trackedWindows = trackedWindows.filter { (wid, _) in
             !windows.contains { $0.windowID == wid }
         }
@@ -195,7 +187,6 @@ final class TilingEngine {
             var w = window
             w.isFloating = previouslyFloating.contains(window.windowID)
             trackedWindows[window.windowID] = w
-            elementToWindowID[window.element.element] = window.windowID
             if !w.isFloating {
                 tree.insert(windowID: window.windowID)
             }
@@ -209,7 +200,7 @@ final class TilingEngine {
 
     /// Find the nearest neighbor of a window in the given direction using last layout frames.
     func neighborOf(windowID: WindowID, direction: MoveDirection) -> WindowID? {
-        guard let sourceFrame = lastLayout.first(where: { $0.0 == windowID })?.1 else { return nil }
+        guard let sourceFrame = lastLayoutMap[windowID] else { return nil }
 
         let sourceCenterX = sourceFrame.midX
         let sourceCenterY = sourceFrame.midY
@@ -217,7 +208,7 @@ final class TilingEngine {
         var bestID: WindowID?
         var bestDistance: CGFloat = .greatestFiniteMagnitude
 
-        for (candidateID, candidateFrame) in lastLayout {
+        for (candidateID, candidateFrame) in lastLayoutMap {
             guard candidateID != windowID else { continue }
 
             let candCenterX = candidateFrame.midX
@@ -254,24 +245,21 @@ final class TilingEngine {
         return bestID
     }
 
+    /// Must only be called on the main thread. The isApplyingLayout flag suppresses
+    /// AX callback re-entry during setFrame calls; suppressMovesUntil handles the
+    /// asynchronous case where callbacks arrive after this method returns.
     private func applyLayout() {
         isApplyingLayout = true
         defer { isApplyingLayout = false }
 
         let tree = currentTree()
         let screenFrame = ScreenInfo.usableFrame()
-        NSLog("[MacTile] applyLayout: screenFrame=\(screenFrame), spaceID=\(currentSpaceID)")
         let layout = tree.calculateLayout(screenFrame: screenFrame)
-        NSLog("[MacTile] applyLayout: \(layout.count) windows in layout")
 
-        lastLayout = layout
+        lastLayoutMap = Dictionary(layout, uniquingKeysWith: { _, last in last })
 
         for (windowID, frame) in layout {
-            guard let window = trackedWindows[windowID] else {
-                NSLog("[MacTile]   wid=\(windowID) NOT FOUND in trackedWindows")
-                continue
-            }
-            NSLog("[MacTile]   wid=\(windowID) -> \(frame)")
+            guard let window = trackedWindows[windowID] else { continue }
             window.element.setFrame(frame)
         }
     }
