@@ -6,7 +6,10 @@ import Foundation
 final class BSPTree {
     private(set) var root: BSPNode?
     private(set) var focusedWindowID: WindowID?
-    let gap: CGFloat = 8.0
+    var gap: CGFloat {
+        let value = UserDefaults.standard.double(forKey: "GapSize")
+        return value == 0 && !UserDefaults.standard.dictionaryRepresentation().keys.contains("GapSize") ? 8.0 : value
+    }
 
     var isEmpty: Bool { root == nil }
 
@@ -64,14 +67,7 @@ final class BSPTree {
             return root.collectLeafFrames()
         }
 
-        let insetFrame = CGRect(
-            x: screenFrame.origin.x + gap,
-            y: screenFrame.origin.y + gap,
-            width: screenFrame.width - gap * 2,
-            height: screenFrame.height - gap * 2
-        )
-
-        root.calculateFrames(container: insetFrame, gap: gap)
+        root.calculateFrames(container: screenFrame, gap: gap)
         return root.collectLeafFrames()
     }
 

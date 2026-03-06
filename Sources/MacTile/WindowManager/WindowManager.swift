@@ -11,6 +11,11 @@ final class WindowManager: WindowObserverDelegate {
     private let tilingEngine = TilingEngine()
     private let shortcutManager = ShortcutManager()
     private lazy var shortcutsPanel = ShortcutsPanel(shortcutManager: shortcutManager)
+    private lazy var stylePanel: StylePanel = {
+        let panel = StylePanel()
+        panel.onGapChanged = { [weak self] in self?.retileCurrentSpace() }
+        return panel
+    }()
     private var isEnabled = true
     private var observedPIDs: Set<pid_t> = []
     private var suppressMovesUntil: Date = .distantPast
@@ -37,6 +42,9 @@ final class WindowManager: WindowObserverDelegate {
         }
         statusBarController.onOpenShortcuts = { [weak self] in
             self?.shortcutsPanel.show()
+        }
+        statusBarController.onOpenStyle = { [weak self] in
+            self?.stylePanel.show()
         }
         shortcutManager.onMoveWindowInDirection = { [weak self] direction in
             self?.moveWindowInDirection(direction)

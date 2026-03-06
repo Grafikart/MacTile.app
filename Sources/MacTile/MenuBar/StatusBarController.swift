@@ -10,6 +10,7 @@ final class StatusBarController {
     var onRetile: (() -> Void)?
     var onToggleEnabled: ((Bool) -> Void)?
     var onOpenShortcuts: (() -> Void)?
+    var onOpenStyle: (() -> Void)?
 
     init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -36,6 +37,10 @@ final class StatusBarController {
         shortcutsItem.target = self
         menu.addItem(shortcutsItem)
 
+        let styleItem = NSMenuItem(title: "Style…", action: #selector(openStyle), keyEquivalent: "")
+        styleItem.target = self
+        menu.addItem(styleItem)
+
         menu.addItem(NSMenuItem.separator())
 
         let quitItem = NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q")
@@ -57,6 +62,10 @@ final class StatusBarController {
 
     @objc private func openShortcuts() {
         onOpenShortcuts?()
+    }
+
+    @objc private func openStyle() {
+        onOpenStyle?()
     }
 
     @objc private func quit() {
