@@ -22,6 +22,7 @@ final class WindowManager: WindowObserverDelegate {
     private var draggingWindowID: WindowID?
     private var resizingWindowID: WindowID?
     private var mouseUpMonitor: Any?
+    private var zoomedWindows: Set<WindowID> = []
 
     deinit {
         NSWorkspace.shared.notificationCenter.removeObserver(self)
@@ -193,6 +194,7 @@ final class WindowManager: WindowObserverDelegate {
         // Try direct lookup first (element may still be valid)
         let el = AccessibilityElement(element)
         if let windowID = el.windowID {
+            zoomedWindows.remove(windowID)
             tilingEngine.removeWindow(windowID: windowID)
             return
         }
@@ -250,6 +252,7 @@ final class WindowManager: WindowObserverDelegate {
         guard let windowID = el.windowID else { return }
         guard tilingEngine.isTracked(windowID: windowID) else { return }
         if tilingEngine.trackedWindow(windowID: windowID)?.isFloating == true { return }
+        if zoomedWindows.contains(windowID) { return }
 
         // Mark this window as being dragged
         draggingWindowID = windowID
@@ -272,6 +275,23 @@ final class WindowManager: WindowObserverDelegate {
         guard let windowID = el.windowID else { return }
         guard tilingEngine.isTracked(windowID: windowID) else { return }
         if tilingEngine.trackedWindow(windowID: windowID)?.isFloating == true { return }
+
+        // Zoom detection: check if window now fills the screen
+        if let pos = el.position, let size = el.size {
+            let frame = CGRect(origin: pos, size: size)
+            let screen = ScreenInfo.screen(containing: pos) ?? NSScreen.main
+
+            if let screen = screen, isZoomedFrame(frame, on: screen) {
+                zoomedWindows.insert(windowID)
+                return
+            }
+        }
+
+        // Un-zoom: window was zoomed but is no longer screen-filling — retile
+        if zoomedWindows.remove(windowID) != nil {
+            retileWithSuppress()
+            return
+        }
 
         resizingWindowID = windowID
 
@@ -390,6 +410,15 @@ final class WindowManager: WindowObserverDelegate {
         let actualFrame = CGRect(origin: pos, size: size)
         suppressMovesUntil = Date() + 0.3
         tilingEngine.adjustSplitRatio(windowID: windowID, actualFrame: actualFrame, oldFrame: layoutFrame)
+    }
+
+    private func isZoomedFrame(_ frame: CGRect, on screen: NSScreen) -> Bool {
+        let usable = ScreenInfo.usableFrame(for: screen)
+        let threshold: CGFloat = 10
+        return abs(frame.origin.x - usable.origin.x) < threshold
+            && abs(frame.origin.y - usable.origin.y) < threshold
+            && abs(frame.width - usable.width) < threshold
+            && abs(frame.height - usable.height) < threshold
     }
 
     private func retileWithSuppress() {

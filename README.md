@@ -11,11 +11,14 @@ MacTile runs as a menu bar app with no Dock icon. It requires macOS 13+ and Acce
 
 - **Automatic BSP tiling** — windows are arranged in a binary tree of horizontal and vertical splits, with configurable gaps between tiles.
 - **Per-space layouts** — each macOS Space (virtual desktop) has its own independent BSP tree, so switching spaces restores that space's layout.
+- **Multi-monitor support** — each screen is handled independently with correct coordinate mapping across displays.
 - **Drag-and-drop rearrangement** — drag a window and drop it onto another tile to swap positions or change the split direction.
-- **Split ratio adjustment** — resize a tiled window's edge to adjust the split ratio between it and its neighbor.
+- **Split ratio adjustment** — resize a tiled window's edge to adjust the split ratio between it and its neighbor; all affected ancestor splits update proportionally.
+- **Zoom-aware** — double-clicking a title bar to zoom a window preserves the BSP tree; double-clicking again returns the window to its tiled position.
 - **Keyboard shortcuts** — move or focus windows in any direction (left/right/up/down) using configurable hotkeys.
 - **Floating windows** — toggle any window out of the tiling layout so it can move and resize freely, then toggle it back in.
-- **Menu bar controls** — shows the current Space number; provides quick access to enable/disable tiling, re-tile, configure shortcuts, and quit.
+- **Style panel** — configure the gap size between tiled windows via a slider (menu bar > Style...).
+- **Menu bar controls** — shows the current Space number; provides quick access to enable/disable tiling, re-tile, configure shortcuts and style, and quit.
 
 ## How it works
 
@@ -28,7 +31,9 @@ main.swift
        └─ WindowManager          (central coordinator)
             ├─ WindowObserver    (AX event listener)
             ├─ TilingEngine      (BSP trees + layout math)
-            └─ ShortcutManager   (global hotkey dispatch)
+            ├─ ShortcutManager   (global hotkey dispatch)
+            ├─ ShortcutsPanel    (hotkey configuration UI)
+            └─ StylePanel        (gap size configuration UI)
 ```
 
 ### Window observation
@@ -42,7 +47,11 @@ Each Space has a `BSPTree` made of `BSPNode`s. Leaf nodes hold a window ID; inte
 - **Insert**: new windows split the currently focused tile, alternating direction by depth.
 - **Remove**: when a window closes, its leaf is removed and the sibling promotes up to fill the space.
 - **Rearrange**: dragging a window onto another tile removes it from its old position and splits the target tile.
-- **Resize**: dragging a window edge adjusts the parent node's split ratio.
+- **Resize**: dragging a window edge adjusts split ratios up the tree — all affected ancestor nodes update proportionally.
+
+### Zoom handling
+
+When a window is "zoomed" (e.g. by double-clicking the title bar), MacTile detects that the window now fills the usable screen area and preserves the BSP tree as-is — no split ratios are changed. When the window is un-zoomed, MacTile retiles it back to its original BSP position.
 
 ### Floating
 
