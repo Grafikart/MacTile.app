@@ -123,6 +123,21 @@ final class TilingEngine {
     /// and splitting the target's tile.
     func moveWindow(windowID: WindowID, toTarget target: WindowID, direction: SplitDirection, placeFirst: Bool) {
         let tree = currentTree()
+
+        // If siblings with matching split direction, swap instead of remove+insert to preserve ratio
+        if let (parent, windowIsLeft) = tree.areSiblings(windowID: windowID, target: target),
+           parent.splitDirection == direction {
+            let wouldSwap = (windowIsLeft && !placeFirst) || (!windowIsLeft && placeFirst)
+            if wouldSwap {
+                let tmp = parent.leftChild
+                parent.leftChild = parent.rightChild
+                parent.rightChild = tmp
+                parent.splitRatio = 1.0 - parent.splitRatio
+            }
+            applyLayout()
+            return
+        }
+
         tree.remove(windowID: windowID)
         tree.insertNextTo(windowID: windowID, target: target, direction: direction, placeFirst: placeFirst)
         applyLayout()

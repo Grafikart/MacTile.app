@@ -95,6 +95,16 @@ final class BSPTree {
         focusedWindowID = windowID
     }
 
+    /// Returns sibling info if windowID and target share the same parent.
+    func areSiblings(windowID: WindowID, target: WindowID) -> (parent: BSPNode, windowIsLeft: Bool)? {
+        guard let root = root else { return nil }
+        guard let nodeA = root.find(windowID: windowID),
+              let nodeB = root.find(windowID: target) else { return nil }
+        guard let parentA = nodeA.parent, parentA === nodeB.parent else { return nil }
+        let windowIsLeft = parentA.leftChild === nodeA
+        return (parentA, windowIsLeft)
+    }
+
     func adjustSplitRatio(forWindow windowID: WindowID, actualFrame: CGRect) {
         guard let root = root else { return }
         guard let leaf = root.find(windowID: windowID) else { return }
