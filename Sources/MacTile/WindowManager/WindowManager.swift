@@ -141,6 +141,7 @@ final class WindowManager: WindowObserverDelegate {
             for windowEl in appWindows {
                 guard windowEl.isTileable else { continue }
                 guard let windowID = windowEl.windowID else { continue }
+                guard windowEl.isOnScreen else { continue }
 
                 let tracked = TrackedWindow(
                     windowID: windowID,
@@ -178,6 +179,7 @@ final class WindowManager: WindowObserverDelegate {
             guard let self = self else { return }
             let el = AccessibilityElement(element)
             guard el.isTileable else { return }
+            guard el.isOnScreen else { return }
             guard let windowID = el.windowID else { return }
             guard !self.tilingEngine.isTracked(windowID: windowID) else { return }
 
@@ -232,6 +234,7 @@ final class WindowManager: WindowObserverDelegate {
             guard let self = self else { return }
             let el = AccessibilityElement(element)
             guard el.isTileable else { return }
+            guard el.isOnScreen else { return }
             guard let windowID = el.windowID else { return }
             guard !self.tilingEngine.isTracked(windowID: windowID) else { return }
 

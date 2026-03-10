@@ -123,6 +123,12 @@ struct AccessibilityElement {
         return info?.first?[kCGWindowLayer as String] as? Int
     }
 
+    var isOnScreen: Bool {
+        guard let wid = windowID else { return false }
+        let info = CGWindowListCopyWindowInfo([.optionIncludingWindow], wid) as? [[String: Any]]
+        return info?.first?[kCGWindowIsOnscreen as String] as? Bool ?? false
+    }
+
     // MARK: - Tileability
 
     var isTileable: Bool {
